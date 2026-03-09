@@ -2,6 +2,10 @@ declare module '@nozbe/watermelondb' {
   export class Model {
     static table: string;
   }
+  export class Database {
+    get(tableName: string): any;
+    write(action: () => Promise<void>): Promise<void>;
+  }
   export function appSchema(options: any): any;
   export function tableSchema(options: any): any;
 }
