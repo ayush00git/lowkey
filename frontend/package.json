@@ -11,6 +11,7 @@
     "prebuild": "expo prebuild"
   },
   "dependencies": {
+    "@config-plugins/react-native-webrtc": "^13.0.0",
     "@grpc/grpc-js": "^1.14.3",
     "@nozbe/watermelondb": "^0.28.0",
     "@nozbe/with-observables": "^1.6.0",
