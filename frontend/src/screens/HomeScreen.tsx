@@ -13,8 +13,16 @@ import {
   ScrollView,
   StatusBar
 } from 'react-native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../App';
 
-export const HomeScreen = () => {
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+
+interface Props {
+  navigation: HomeScreenNavigationProp;
+}
+
+export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   // Dummy local UUID
   const myUuid = '123e4567-e89b-12d3-a456-426614174000';
   const [targetUuid, setTargetUuid] = useState('');
@@ -33,7 +41,7 @@ export const HomeScreen = () => {
       return;
     }
     console.log('Initiating secure P2P connection to:', targetUuid);
-    // TODO: Wire WebRTCManager.createOffer(targetUuid)
+    navigation.navigate('Chat', { targetUuid });
   };
 
   return (
