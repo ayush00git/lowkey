@@ -2,19 +2,27 @@ import {
   RTCPeerConnection,
   RTCSessionDescription,
   RTCIceCandidate,
+  RTCDataChannel,
+  RTCMessageEvent,
 } from 'react-native-webrtc';
 import { SignalingService } from './SignalingService';
 import { SdpExchange, IceCandidate } from '../proto/signaling_pb';
+import { Database } from '@nozbe/watermelondb';
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 
 export class WebRTCManager {
   public peerConnection: RTCPeerConnection;
   private signaling: SignalingService;
+  private database: Database;
+  public dataChannel: RTCDataChannel | null = null;
   private currentTargetUuid: string | null = null;
   
   public onRemoteStream?: (stream: any) => void;
 
-  constructor(signalingService: SignalingService) {
+  constructor(signalingService: SignalingService, database: Database) {
     this.signaling = signalingService;
+    this.database = database;
 
     // Initialize RTCPeerConnection with public Google STUN servers
     this.peerConnection = new RTCPeerConnection({
@@ -52,6 +60,50 @@ export class WebRTCManager {
     this.peerConnection.addEventListener('connectionstatechange', () => {
       console.log('WebRTC Connection State:', this.peerConnection.connectionState);
     });
+
+    this.peerConnection.ondatachannel = (event: any) => {
+      console.log('Received remote data channel');
+      this.dataChannel = event.channel;
+      this.setupDataChannel(this.dataChannel!);
+    };
+  }
+
+  private setupDataChannel(channel: RTCDataChannel) {
+    channel.onopen = () => {
+      console.log('Data channel is open and ready');
+    };
+
+    channel.onmessage = (event: RTCMessageEvent) => {
+      console.log('Received message:', event.data);
+      if (typeof event.data === 'string') {
+        this.saveMessageToDB(event.data);
+      }
+    };
+
+    channel.onerror = (error: Error) => {
+      console.error('Data channel error:', error);
+    };
+
+    channel.onclose = () => {
+      console.log('Data channel closed');
+    };
+  }
+
+  private async saveMessageToDB(text: string) {
+    try {
+      await this.database.write(async () => {
+        const messagesCollection: any = this.database.get('messages');
+        await messagesCollection.create((message: any) => {
+          message.message_id = uuidv4();
+          message.sender_id = this.currentTargetUuid || 'unknown';
+          message.ciphertext = text;
+          message.expires_at = Date.now() + 86400000; // 24 hours from now
+        });
+      });
+      console.log('Message saved to WatermelonDB successfully.');
+    } catch (err) {
+      console.error('Error saving message to DB:', err);
+    }
   }
 
   /**
@@ -61,6 +113,10 @@ export class WebRTCManager {
     this.currentTargetUuid = targetUuid;
 
     try {
+      // Proactively create the data channel since we are the caller
+      this.dataChannel = this.peerConnection.createDataChannel('chat');
+      this.setupDataChannel(this.dataChannel);
+
       const offer = await this.peerConnection.createOffer({});
       await this.peerConnection.setLocalDescription(offer);
 
@@ -131,6 +187,10 @@ export class WebRTCManager {
   }
 
   public close() {
+    if (this.dataChannel) {
+      this.dataChannel.close();
+      this.dataChannel = null;
+    }
     this.peerConnection.close();
     this.currentTargetUuid = null;
   }
