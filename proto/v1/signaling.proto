@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package signaling.v1;
 
-option go_package = "github.com/ayush/lowkey/proto/v1;signalingv1";
+option go_package = "github.com/ayush00git/lowkey/proto/v1;signalingv1";
 
 // Signaling service facilitates WebRTC negotiation between peers.
 service Signaling {
@@ -46,6 +46,7 @@ message SdpExchange {
   }
   Type type = 1;
   string sdp = 2;
+  string target_uuid = 3;
 }
 
 // IceCandidate represents a WebRTC ICE candidate.
@@ -54,6 +55,7 @@ message IceCandidate {
   string sdp_mid = 2;
   int32 sdp_m_line_index = 3;
   string username_fragment = 4;
+  string target_uuid = 5;
 }
 
 // Error represents a signaling error.
