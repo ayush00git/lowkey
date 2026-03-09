@@ -30,6 +30,7 @@ Encapsulates WebRTC Session Description Protocol details.
 
 - `type` (Enum): The type of SDP (OFFER, ANSWER, etc.).
 - `sdp` (string): The raw SDP string.
+- `target_uuid` (string): The recipient's UUID for routing by the server.
 
 #### `IceCandidate`
 
@@ -38,7 +39,26 @@ Contains WebRTC ICE candidate information.
 - `candidate` (string): The ICE candidate string.
 - `sdp_mid` (string): The media stream ID.
 - `sdp_m_line_index` (int32): The index of the media line.
+- `target_uuid` (string): The recipient's UUID for routing by the server.
 
-#### `SignalRequest` / `SignalResponse`
+## Go Signaling Server
 
-Wrapper messages for the bidirectional stream, using `oneof` to handle multiple payload types.
+The implementation in `./server` provides a robust signaling coordinator.
+
+### Features
+
+- **Bidirectional Streaming**: Uses gRPC streams for real-time negotiation.
+- **Redis Routing**: Leverages Redis Pub/Sub to forward messages between peers.
+- **UUID-based Delivery**: Messages are routed specifically to the `target_uuid` provided in the payload.
+
+### Running the Server
+
+1. Ensure Redis is running:
+   ```bash
+   docker run -p 6379:6379 redis
+   ```
+2. Build and run the server:
+   ```bash
+   go build -o signaling-server ./server
+   ./signaling-server
+   ```
