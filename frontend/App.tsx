@@ -24,6 +24,7 @@ function App() {
 }
 
 import { ChatScreenRaw } from './src/screens/ChatScreen';
+import { HomeScreen } from './src/screens/HomeScreen';
 
 function AppContent() {
   const safeAreaInsets = useSafeAreaInsets();
@@ -37,6 +38,7 @@ function AppContent() {
   return (
     <View style={styles.container}>
       <ChatScreenRaw messages={mockMessages as any} />
+      <HomeScreen />
     </View>
   );
 }
