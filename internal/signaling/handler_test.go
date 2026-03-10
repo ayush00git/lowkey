@@ -90,9 +90,6 @@ func TestFullSignalingFlow(t *testing.T) {
 	if createdPayload.SessionID == "" {
 		t.Fatal("session ID is empty")
 	}
-	if createdPayload.Key == "" {
-		t.Fatal("encryption key is empty")
-	}
 	t.Logf("session created: %s", createdPayload.SessionID)
 
 	// --- Step 3: Bob joins the session ---
@@ -122,12 +119,7 @@ func TestFullSignalingFlow(t *testing.T) {
 	if alicePayload.Peer != "bob" {
 		t.Fatalf("alice's peer should be bob, got %s", alicePayload.Peer)
 	}
-
-	// Keys should match
-	if bobPayload.Key != alicePayload.Key {
-		t.Fatal("encryption keys don't match between peers")
-	}
-	t.Logf("both peers received matching keys ✓")
+	t.Log("both peers joined session — no server key involved ✓")
 
 	// --- Step 4: Alice sends an SDP offer to Bob ---
 	offerPayload, _ := json.Marshal(map[string]string{"sdp": "v=0\r\n..."})
