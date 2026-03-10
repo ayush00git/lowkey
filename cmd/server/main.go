@@ -34,11 +34,10 @@ func main() {
 	handler := corsMiddleware(mux, cfg.CORSOrigins)
 
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:    ":" + cfg.Port,
+		Handler: handler,
+		// NOTE: Do NOT set ReadTimeout/WriteTimeout — they kill WebSocket connections.
+		// WebSockets are long-lived and must stay open indefinitely.
 	}
 
 	// Start server in a goroutine
