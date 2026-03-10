@@ -1,0 +1,17 @@
+[Unit]
+Description=Lowkey Signaling Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/lowkey
+ExecStart=/opt/lowkey/lowkey-server
+Restart=always
+RestartSec=5
+Environment=PORT=8080
+Environment=SESSION_TTL=10m
+Environment=CORS_ORIGINS=*
+
+[Install]
+WantedBy=multi-user.target

@@ -36,9 +36,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<StreamSubscription> _subs = [];
 
   // Server URL — IMPORTANT: 
-  // - Use 'ws://10.189.40.195:8080' for Physical Devices & Emulators
-  // - Use 'ws://localhost:8080' for Linux Desktop
-  static const _serverUrl = 'ws://10.189.40.195:8080'; 
+  // - Use 'wss://lowkey.ayushz.me' for Production
+  // - Use 'ws://10.189.40.195:8080' for Local Dev
+  static const _serverUrl = 'wss://lowkey.ayushz.me'; 
 
   @override
   void initState() {
