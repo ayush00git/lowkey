@@ -35,6 +35,7 @@ declare module 'react-native-webrtc' {
 
   export class RTCDataChannel {
     label: string;
+    readyState: 'connecting' | 'open' | 'closing' | 'closed';
     send(data: string | ArrayBuffer | ArrayBufferView): void;
     close(): void;
     onopen: (() => void) | null;

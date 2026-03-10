@@ -57,6 +57,8 @@ function AppContent() {
         <ChatScreenRaw
           messages={mockMessages as any}
           targetUuid={targetUuid}
+          myUuid={myUuid}
+          webRTCManager={webRTCManager}
           onGoBack={() => setCurrentScreen('home')}
         />
       )}

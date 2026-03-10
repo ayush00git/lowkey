@@ -24,12 +24,18 @@ export class WebRTCManager {
     this.signaling = signalingService;
     this.database = database;
 
-    // Initialize RTCPeerConnection with public Google STUN servers
+    // Initialize RTCPeerConnection with STUN + TURN servers
     this.peerConnection = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
+        // TURN server for NAT traversal (update host for production)
+        // TODO: Replace YOUR_SERVER_IP with your deployed server's public IP
+        {
+          urls: 'turn:YOUR_SERVER_IP:3478',
+          username: 'lowkey',
+          credential: 'lowkey-turn-secret',
+        },
       ]
     });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Camera, Mic, Send, Lock, ArrowLeft } from 'lucide-react-native';
 import withObservables from '@nozbe/with-observables';
+import type { WebRTCManager } from '../services/WebRTCManager';
 
 // --- Type Definitions ---
 interface MessageRecord {
@@ -25,34 +26,94 @@ interface MessageRecord {
 interface ChatScreenProps {
   messages: MessageRecord[];
   targetUuid?: string;
+  myUuid?: string;
+  webRTCManager?: WebRTCManager;
   onGoBack?: () => void;
 }
 
-// Temporary myUuid for mocking "self" vs "partner" bubbles
-const MY_SUPER_DUMMY_UUID = '123e4567-e89b-12d3-a456-426614174000';
-
 // --- Inner Component ---
-const ChatScreenInner: React.FC<ChatScreenProps> = ({ messages: initialMessages, targetUuid, onGoBack }) => {
+const ChatScreenInner: React.FC<ChatScreenProps> = ({ messages: initialMessages, targetUuid, myUuid, webRTCManager, onGoBack }) => {
   const [inputText, setInputText] = useState('');
   const [localMessages, setLocalMessages] = useState<MessageRecord[]>(initialMessages);
 
   const displayTargetUuid = targetUuid || 'Unknown Partner';
+  const selfId = myUuid || 'self';
 
-  const handleSend = () => {
+  // Listen for incoming DataChannel messages
+  useEffect(() => {
+    if (!webRTCManager) return;
+
+    const handleIncomingMessage = (text: string) => {
+      const incomingMsg: MessageRecord = {
+        id: Date.now().toString() + '-recv',
+        ciphertext: text,
+        sender_id: targetUuid || 'unknown',
+        created_at: Date.now(),
+      };
+      setLocalMessages(prev => [...prev, incomingMsg]);
+    };
+
+    // If data channel already exists (we are the caller), attach listener
+    if (webRTCManager.dataChannel) {
+      const existing = webRTCManager.dataChannel;
+      const prevOnMessage = existing.onmessage;
+      existing.onmessage = (event: any) => {
+        if (typeof event.data === 'string') {
+          handleIncomingMessage(event.data);
+        }
+      };
+      return () => { existing.onmessage = prevOnMessage; };
+    }
+
+    // If we are the callee, data channel arrives later via ondatachannel
+    const origHandler = webRTCManager.peerConnection.ondatachannel;
+    webRTCManager.peerConnection.ondatachannel = (event: any) => {
+      // Let WebRTCManager do its setup first
+      if (origHandler) {
+        (origHandler as any).call(webRTCManager.peerConnection, event);
+      }
+      // Then attach our UI listener on top
+      const channel = event.channel;
+      const prevOnMsg = channel.onmessage;
+      channel.onmessage = (msgEvent: any) => {
+        // Call the original handler (saves to DB)
+        if (prevOnMsg) { prevOnMsg(msgEvent); }
+        if (typeof msgEvent.data === 'string') {
+          handleIncomingMessage(msgEvent.data);
+        }
+      };
+    };
+
+    return () => {
+      webRTCManager.peerConnection.ondatachannel = origHandler;
+    };
+  }, [webRTCManager, targetUuid]);
+
+  const handleSend = useCallback(() => {
     if (!inputText.trim()) return;
+
+    const text = inputText.trim();
+
+    // Send over WebRTC DataChannel
+    if (webRTCManager?.dataChannel?.readyState === 'open') {
+      webRTCManager.dataChannel.send(text);
+    } else {
+      console.warn('DataChannel not open yet, message stored locally only');
+    }
+
+    // Add to local UI
     const newMessage: MessageRecord = {
       id: Date.now().toString(),
-      ciphertext: inputText.trim(),
-      sender_id: MY_SUPER_DUMMY_UUID,
+      ciphertext: text,
+      sender_id: selfId,
       created_at: Date.now(),
     };
     setLocalMessages(prev => [...prev, newMessage]);
-    // TODO: Wire WebRTCManager.dataChannel.send() and WatermelonDB save
     setInputText('');
-  };
+  }, [inputText, webRTCManager, selfId]);
 
   const renderMessage = ({ item }: { item: MessageRecord }) => {
-    const isMe = item.sender_id === MY_SUPER_DUMMY_UUID;
+    const isMe = item.sender_id === selfId;
 
     return (
       <View style={[styles.messageWrapper, isMe ? styles.messageWrapperMe : styles.messageWrapperOther]}>

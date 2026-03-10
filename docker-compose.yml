@@ -1,0 +1,48 @@
+services:
+  # Redis for pub/sub message routing
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Go gRPC signaling server
+  signaling-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_ADDR=redis:6379
+      - GRPC_PORT=50051
+    ports:
+      - "50051:50051"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Envoy proxy — translates gRPC-Web → gRPC
+  envoy:
+    image: envoyproxy/envoy:v1.31-latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - signaling-server
+
+  # Coturn TURN server for NAT traversal
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/turnserver.conf:ro
+    command: ["-c", "/etc/turnserver.conf"]
+
+volumes:
+  redis-data:

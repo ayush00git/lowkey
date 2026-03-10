@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -127,14 +128,24 @@ func (s *server) Connect(stream pb.Signaling_ConnectServer) error {
 	return <-errCh
 }
 
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
 func main() {
-	lis, err := net.Listen("tcp", ":50051")
+	redisAddr := getEnv("REDIS_ADDR", "localhost:6379")
+	grpcPort := getEnv("GRPC_PORT", "50051")
+
+	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	s := grpc.NewServer()
-	pb.RegisterSignalingServer(s, newServer("localhost:6379"))
+	pb.RegisterSignalingServer(s, newServer(redisAddr))
 
 	reflection.Register(s)
 
