@@ -1,49 +1,50 @@
 import 'dart:convert';
-import 'dart:typed_data';
-import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:pinenacl/x25519.dart';
 
-/// AES-256-GCM encryption/decryption for E2E chat messages.
+/// Client-side X25519 + XSalsa20-Poly1305 (NaCl Box) crypto.
+/// The server NEVER sees the shared secret — only public keys are exchanged.
 class CryptoService {
-  encrypt.Key? _key;
+  late final PrivateKey _privateKey;
+  late final PublicKey _publicKey;
+  Box? _box;
 
-  /// Set the session encryption key (base64-encoded from the server).
-  void setKey(String base64Key) {
-    _key = encrypt.Key(base64Decode(base64Key));
+  CryptoService() {
+    _privateKey = PrivateKey.generate();
+    _publicKey = _privateKey.publicKey;
   }
 
-  bool get hasKey => _key != null;
+  /// Our public key as base64 (sent to peer via server relay).
+  String get publicKeyBase64 => base64Encode(Uint8List.fromList(_publicKey));
 
-  /// Encrypt plaintext → base64 string (IV prepended).
+  /// Derive the shared secret from our private key + peer's public key.
+  /// Both sides compute the same secret: X25519(myPrivate, theirPublic).
+  void deriveSharedKey(String peerPublicKeyBase64) {
+    final peerPk = PublicKey(Uint8List.fromList(base64Decode(peerPublicKeyBase64)));
+    _box = Box(myPrivateKey: _privateKey, theirPublicKey: peerPk);
+  }
+
+  bool get hasKey => _box != null;
+
+  /// Encrypt plaintext → base64 (nonce + ciphertext + MAC).
   String encryptMessage(String plaintext) {
-    if (_key == null) throw StateError('Encryption key not set');
-
-    final iv = encrypt.IV.fromSecureRandom(16);
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key!, mode: encrypt.AESMode.gcm));
-    final encrypted = encrypter.encrypt(plaintext, iv: iv);
-
-    // Prepend IV to ciphertext so the receiver can extract it
-    final combined = Uint8List(iv.bytes.length + encrypted.bytes.length);
-    combined.setAll(0, iv.bytes);
-    combined.setAll(iv.bytes.length, encrypted.bytes);
-
-    return base64Encode(combined);
+    if (_box == null) throw StateError('Shared key not derived');
+    final encrypted = _box!.encrypt(Uint8List.fromList(utf8.encode(plaintext)));
+    return base64Encode(Uint8List.fromList(encrypted));
   }
 
-  /// Decrypt base64 string → plaintext (extracts prepended IV).
+  /// Decrypt base64 → plaintext (splits nonce from ciphertext).
   String decryptMessage(String ciphertext) {
-    if (_key == null) throw StateError('Encryption key not set');
-
-    final combined = base64Decode(ciphertext);
-    final iv = encrypt.IV(Uint8List.fromList(combined.sublist(0, 16)));
-    final encryptedBytes = combined.sublist(16);
-
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key!, mode: encrypt.AESMode.gcm));
-    final encrypted = encrypt.Encrypted(Uint8List.fromList(encryptedBytes));
-
-    return encrypter.decrypt(encrypted, iv: iv);
+    if (_box == null) throw StateError('Shared key not derived');
+    final bytes = base64Decode(ciphertext);
+    // First 24 bytes = nonce, rest = ciphertext + MAC
+    final nonce = Uint8List.fromList(bytes.sublist(0, 24));
+    final cipher = Uint8List.fromList(bytes.sublist(24));
+    final encrypted = EncryptedMessage(nonce: nonce, cipherText: cipher);
+    final decrypted = _box!.decrypt(encrypted);
+    return utf8.decode(decrypted);
   }
 
   void clear() {
-    _key = null;
+    _box = null;
   }
 }
