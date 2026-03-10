@@ -91,6 +91,11 @@ class SignalingService {
     _send({'type': 'session:join', 'sessionId': sessionId});
   }
 
+  /// Connect to a user by their username (server creates session automatically).
+  void connectToUser(String targetUsername) {
+    _send({'type': 'session:connect', 'target': targetUsername});
+  }
+
   /// Send an SDP offer to a target peer.
   void sendOffer(String target, Map<String, dynamic> sdp) {
     _send({

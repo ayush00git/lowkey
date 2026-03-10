@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -20,7 +19,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _msgController = TextEditingController();
-  final _sessionIdController = TextEditingController();
+  final _targetUsernameController = TextEditingController();
   final _scrollController = ScrollController();
   final _uuid = const Uuid();
 
@@ -30,14 +29,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String _username = '';
   String? _peer;
-  String? _sessionId;
+  bool _isInitiator = false;
   bool _wsConnected = false;
   bool _p2pConnected = false;
   final List<ChatMessage> _messages = [];
   final List<StreamSubscription> _subs = [];
 
-  // Server URL — change this for production
-  static const _serverUrl = 'ws://10.0.2.2:8080'; // Android emulator → host
+  // Server URL — IMPORTANT: 
+  // - Use 'ws://10.189.40.195:8080' for Physical Devices & Emulators
+  // - Use 'ws://localhost:8080' for Linux Desktop
+  static const _serverUrl = 'ws://10.189.40.195:8080'; 
 
   @override
   void initState() {
@@ -52,43 +53,35 @@ class _ChatScreenState extends State<ChatScreen> {
     _signaling = SignalingService();
     _webrtc = WebRTCService(_signaling);
 
-    // Listen to signaling events
     _subs.add(_signaling.onConnectionChange.listen((connected) {
       setState(() => _wsConnected = connected);
-    }));
-
-    _subs.add(_signaling.onSessionCreated.listen((payload) {
-      setState(() {
-        _sessionId = payload['sessionId'] as String;
-        _crypto.setKey(payload['key'] as String);
-      });
-      _showSnackbar('Session created — share the ID with your peer');
     }));
 
     _subs.add(_signaling.onSessionJoined.listen((payload) {
       final peer = payload['peer'] as String;
       final key = payload['key'] as String;
+      
       setState(() {
         _peer = peer;
-        _sessionId = payload['sessionId'] as String;
       });
       _crypto.setKey(key);
-      // Initiator starts the WebRTC call
-      if (_isCreator()) {
+      
+      // The initiator (A) starts the WebRTC call to B
+      if (_isInitiator) {
         _webrtc.startCall(peer);
       }
-      _showSnackbar('$peer joined — establishing P2P connection...');
+      _showSnackbar('Connected to $peer — establishing encrypted channel...');
     }));
 
     _subs.add(_signaling.onError.listen((err) {
       _showSnackbar('Error: ${err['message']}', isError: true);
+      setState(() => _isInitiator = false);
     }));
 
-    // Listen to WebRTC events
     _subs.add(_webrtc.onDataChannelState.listen((connected) {
       setState(() => _p2pConnected = connected);
       if (connected) {
-        _showSnackbar('🔒 P2P connected — messages are end-to-end encrypted');
+        _showSnackbar('🔒 E2E Encryption Active');
       }
     }));
 
@@ -96,23 +89,12 @@ class _ChatScreenState extends State<ChatScreen> {
       _handleIncomingMessage(data);
     }));
 
-    // Connect to signaling server
     _signaling.connect(_serverUrl, _username);
-  }
-
-  bool _isCreator() {
-    // The session creator is the one who created it (onSessionCreated was fired)
-    return _peer != null;
   }
 
   void _handleIncomingMessage(String data) {
     try {
-      String content;
-      if (_crypto.hasKey) {
-        content = _crypto.decryptMessage(data);
-      } else {
-        content = data;
-      }
+      String content = _crypto.hasKey ? _crypto.decryptMessage(data) : data;
 
       final msg = ChatMessage(
         id: _uuid.v4(),
@@ -133,13 +115,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _msgController.text.trim();
     if (text.isEmpty || !_p2pConnected) return;
 
-    // Encrypt and send
-    String payload;
-    if (_crypto.hasKey) {
-      payload = _crypto.encryptMessage(text);
-    } else {
-      payload = text;
-    }
+    String payload = _crypto.hasKey ? _crypto.encryptMessage(text) : text;
     _webrtc.sendMessage(payload);
 
     final msg = ChatMessage(
@@ -189,7 +165,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _webrtc.dispose();
     _signaling.dispose();
     _msgController.dispose();
-    _sessionIdController.dispose();
+    _targetUsernameController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -201,10 +177,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: _buildAppBar(),
       body: Column(
         children: [
-          // Session panel (before P2P is connected)
-          if (!_p2pConnected) _buildSessionPanel(),
-
-          // Messages
+          if (!_p2pConnected) _buildConnectionPanel(),
           Expanded(
             child: _messages.isEmpty
                 ? _buildEmptyState()
@@ -215,8 +188,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemBuilder: (ctx, i) => MessageBubble(message: _messages[i]),
                   ),
           ),
-
-          // Input bar
           if (_p2pConnected) _buildInputBar(),
         ],
       ),
@@ -233,7 +204,7 @@ class _ChatScreenState extends State<ChatScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _peer != null ? _peer! : 'lowkey',
+            _peer ?? 'lowkey',
             style: GoogleFonts.inter(
               fontSize: 17,
               fontWeight: FontWeight.w600,
@@ -267,7 +238,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildSessionPanel() {
+  Widget _buildConnectionPanel() {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -283,150 +254,90 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_sessionId != null) ...[
-            // Show session ID with copy button
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F8),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.tag_rounded, size: 16, color: Color(0xFF9E9E9E)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _sessionId!,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF1A1A2E),
-                        letterSpacing: 0.3,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: _sessionId!));
-                      _showSnackbar('Session ID copied');
-                    },
-                    child: const Icon(Icons.copy_rounded, size: 16, color: Color(0xFF9E9E9E)),
-                  ),
-                ],
-              ),
+          Text(
+            'Connect to Peer',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF1A1A2E),
             ),
-            const SizedBox(height: 12),
-            Text(
-              _peer == null
-                  ? 'Waiting for peer to join...'
-                  : 'Connecting to $_peer...',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: const Color(0xFF9E9E9E),
-              ),
-            ),
-          ] else ...[
-            // Create or join session
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: ElevatedButton.icon(
-                      onPressed: _wsConnected
-                          ? () => _signaling.createSession()
-                          : null,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: Text(
-                        'New Session',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A1A2E),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _targetUsernameController,
+                  style: GoogleFonts.inter(fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: "Enter friend's username",
+                    hintStyle: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: const Color(0xFFBDBDBD),
                     ),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                    prefixIcon: const Icon(Icons.person_outline, size: 18),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: TextField(
-                      controller: _sessionIdController,
-                      style: GoogleFonts.inter(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Paste session ID',
-                        hintStyle: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: const Color(0xFFBDBDBD),
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F5F8),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: _wsConnected
-                        ? () {
-                            final id = _sessionIdController.text.trim();
-                            if (id.isNotEmpty) {
-                              _signaling.joinSession(id);
-                            }
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: (_wsConnected && !_isInitiator)
+                      ? () {
+                          final target = _targetUsernameController.text.trim();
+                          if (target.isNotEmpty) {
+                            setState(() => _isInitiator = true);
+                            _signaling.connectToUser(target);
                           }
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1A1A2E),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: Text(
-                      'Join',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A1A2E),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                ),
-              ],
-            ),
-            if (!_wsConnected) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Connecting to server...',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: const Color(0xFFE57373),
+                  child: _isInitiator
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          'Connect',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
             ],
+          ),
+          if (!_wsConnected) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Waiting for server connection...',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: const Color(0xFFE57373),
+              ),
+            ),
           ],
         ],
       ),
