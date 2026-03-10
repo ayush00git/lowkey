@@ -7,7 +7,6 @@ import '../models/message.dart';
 import '../services/signaling_service.dart';
 import '../services/webrtc_service.dart';
 import '../services/crypto_service.dart';
-import '../widgets/connection_indicator.dart';
 import '../widgets/message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -66,7 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
       
       // Send our X25519 public key to the peer
       _signaling.sendPublicKey(peer, _crypto.publicKeyBase64);
-      _showSnackbar('Connected to $peer — exchanging keys...');
+      _showSnackbar('connecting to $peer... exchanging keys');
     }));
 
     // Handle incoming public key from peer → derive shared secret
@@ -76,7 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final sender = msg['sender'] as String;
       
       _crypto.deriveSharedKey(peerPublicKey);
-      _showSnackbar('🔑 Key exchange complete with $sender');
+      _showSnackbar('key exchange complete with $sender');
       
       // The initiator starts the WebRTC call after key exchange
       if (_isInitiator) {
@@ -85,14 +84,14 @@ class _ChatScreenState extends State<ChatScreen> {
     }));
 
     _subs.add(_signaling.onError.listen((err) {
-      _showSnackbar('Error: ${err['message']}', isError: true);
+      _showSnackbar('${err['message']}'.toLowerCase(), isError: true);
       setState(() => _isInitiator = false);
     }));
 
     _subs.add(_webrtc.onDataChannelState.listen((connected) {
       setState(() => _p2pConnected = connected);
       if (connected) {
-        _showSnackbar('🔒 E2E Encryption Active — Zero Trust');
+        _showSnackbar('e2e encryption active. zero trust.');
       }
     }));
 
@@ -118,7 +117,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _messages.add(msg));
       _scrollToBottom();
     } catch (e) {
-      _showSnackbar('Failed to decrypt message', isError: true);
+      _showSnackbar('failed to decrypt message', isError: true);
     }
   }
 
@@ -158,12 +157,30 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(text, style: GoogleFonts.inter(fontSize: 13)),
-        backgroundColor: isError ? const Color(0xFFE57373) : const Color(0xFF1A1A2E),
+        content: Text(
+          text.toLowerCase(),
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: isError ? const Color(0xFFE57373) : Colors.white,
+          ),
+        ),
+        backgroundColor: const Color(0xFF1A1A2E),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: isError
+              ? const BorderSide(color: Color(0xFFE57373), width: 1)
+              : BorderSide.none,
+        ),
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 140, // Push to top
+          left: 16,
+          right: 16,
+        ),
+        dismissDirection: DismissDirection.up,
         duration: const Duration(seconds: 3),
+        elevation: 0,
       ),
     );
   }
@@ -216,14 +233,13 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Text(
             _peer ?? 'lowkey',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
+            style: GoogleFonts.caveat(
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
               color: const Color(0xFF1A1A2E),
+              height: 1.0,
             ),
           ),
-          const SizedBox(height: 2),
-          ConnectionIndicator(connected: _p2pConnected),
         ],
       ),
       actions: [

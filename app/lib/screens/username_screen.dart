@@ -66,34 +66,35 @@ class _UsernameScreenState extends State<UsernameScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Logo / Icon
+                    // Logo
                     Container(
-                      width: 72,
-                      height: 72,
+                      width: 96,
+                      height: 96,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A2E),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(28),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF1A1A2E).withValues(alpha: 0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.lock_outline_rounded,
-                        color: Colors.white,
-                        size: 32,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: Image.asset(
+                          'assets/images/logo.webp',
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
 
                     // Title
                     Text(
                       'lowkey',
-                      style: GoogleFonts.inter(
-                        fontSize: 32,
+                      style: GoogleFonts.caveat(
+                        fontSize: 48,
                         fontWeight: FontWeight.w700,
                         color: const Color(0xFF1A1A2E),
                         letterSpacing: -1,
