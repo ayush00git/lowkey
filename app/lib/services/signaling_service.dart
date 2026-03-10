@@ -10,12 +10,14 @@ class SignalingService {
 
   final _onSessionCreated = StreamController<Map<String, dynamic>>.broadcast();
   final _onSessionJoined = StreamController<Map<String, dynamic>>.broadcast();
+  final _onKeyExchange = StreamController<Map<String, dynamic>>.broadcast();
   final _onSignal = StreamController<Map<String, dynamic>>.broadcast();
   final _onError = StreamController<Map<String, dynamic>>.broadcast();
   final _onConnectionChange = StreamController<bool>.broadcast();
 
   Stream<Map<String, dynamic>> get onSessionCreated => _onSessionCreated.stream;
   Stream<Map<String, dynamic>> get onSessionJoined => _onSessionJoined.stream;
+  Stream<Map<String, dynamic>> get onKeyExchange => _onKeyExchange.stream;
   Stream<Map<String, dynamic>> get onSignal => _onSignal.stream;
   Stream<Map<String, dynamic>> get onError => _onError.stream;
   Stream<bool> get onConnectionChange => _onConnectionChange.stream;
@@ -63,6 +65,9 @@ class SignalingService {
         final payload = jsonDecode(jsonEncode(msg['payload'])) as Map<String, dynamic>;
         _onSessionJoined.add(payload);
         break;
+      case 'key:exchange':
+        _onKeyExchange.add(msg);
+        break;
       case 'signal:offer':
       case 'signal:answer':
       case 'signal:ice':
@@ -94,6 +99,15 @@ class SignalingService {
   /// Connect to a user by their username (server creates session automatically).
   void connectToUser(String targetUsername) {
     _send({'type': 'session:connect', 'target': targetUsername});
+  }
+
+  /// Send our X25519 public key to the peer.
+  void sendPublicKey(String target, String publicKeyBase64) {
+    _send({
+      'type': 'key:exchange',
+      'target': target,
+      'payload': {'publicKey': publicKeyBase64},
+    });
   }
 
   /// Send an SDP offer to a target peer.
@@ -134,6 +148,7 @@ class SignalingService {
     disconnect();
     _onSessionCreated.close();
     _onSessionJoined.close();
+    _onKeyExchange.close();
     _onSignal.close();
     _onError.close();
     _onConnectionChange.close();

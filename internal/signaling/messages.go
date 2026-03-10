@@ -11,6 +11,9 @@ const (
 	TypeSessionJoined  = "session:joined"
 	TypeSessionConnect = "session:connect" // connect by target username
 
+	// Key exchange (client-side X25519)
+	TypeKeyExchange = "key:exchange"
+
 	// WebRTC signaling
 	TypeSignalOffer  = "signal:offer"
 	TypeSignalAnswer = "signal:answer"
@@ -32,14 +35,12 @@ type Message struct {
 // SessionCreatedPayload is sent to the creator after session creation.
 type SessionCreatedPayload struct {
 	SessionID string `json:"sessionId"`
-	Key       string `json:"key"` // base64-encoded symmetric key
 }
 
-// SessionJoinedPayload is sent to both users when the joiner connects.
+// SessionJoinedPayload is sent to both users when the session is ready.
 type SessionJoinedPayload struct {
 	SessionID string `json:"sessionId"`
 	Peer      string `json:"peer"` // the other user's username
-	Key       string `json:"key"`  // base64-encoded symmetric key
 }
 
 // ErrorPayload carries error information.

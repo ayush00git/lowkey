@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ayush/lowkey/internal/crypto"
 	"github.com/google/uuid"
 )
 
@@ -40,17 +39,11 @@ func (s *MemoryStore) Stop() {
 }
 
 func (s *MemoryStore) Create(creator string) (*Session, error) {
-	key, err := crypto.GenerateSessionKey()
-	if err != nil {
-		return nil, err
-	}
-
 	now := time.Now()
 	sess := &Session{
 		ID:        uuid.New(),
 		Users:     [2]string{creator, ""},
 		UserCount: 1,
-		SharedKey: key,
 		CreatedAt: now,
 		ExpiresAt: now.Add(s.ttl),
 	}

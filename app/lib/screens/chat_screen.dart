@@ -59,18 +59,29 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _subs.add(_signaling.onSessionJoined.listen((payload) {
       final peer = payload['peer'] as String;
-      final key = payload['key'] as String;
       
       setState(() {
         _peer = peer;
       });
-      _crypto.setKey(key);
       
-      // The initiator (A) starts the WebRTC call to B
+      // Send our X25519 public key to the peer
+      _signaling.sendPublicKey(peer, _crypto.publicKeyBase64);
+      _showSnackbar('Connected to $peer — exchanging keys...');
+    }));
+
+    // Handle incoming public key from peer → derive shared secret
+    _subs.add(_signaling.onKeyExchange.listen((msg) {
+      final payload = msg['payload'] as Map<String, dynamic>;
+      final peerPublicKey = payload['publicKey'] as String;
+      final sender = msg['sender'] as String;
+      
+      _crypto.deriveSharedKey(peerPublicKey);
+      _showSnackbar('🔑 Key exchange complete with $sender');
+      
+      // The initiator starts the WebRTC call after key exchange
       if (_isInitiator) {
-        _webrtc.startCall(peer);
+        _webrtc.startCall(sender);
       }
-      _showSnackbar('Connected to $peer — establishing encrypted channel...');
     }));
 
     _subs.add(_signaling.onError.listen((err) {
@@ -81,7 +92,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _subs.add(_webrtc.onDataChannelState.listen((connected) {
       setState(() => _p2pConnected = connected);
       if (connected) {
-        _showSnackbar('🔒 E2E Encryption Active');
+        _showSnackbar('🔒 E2E Encryption Active — Zero Trust');
       }
     }));
 
