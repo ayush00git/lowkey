@@ -9,6 +9,7 @@ const (
 	TypeSessionCreated = "session:created"
 	TypeSessionJoin    = "session:join"
 	TypeSessionJoined  = "session:joined"
+	TypeSessionConnect = "session:connect" // connect by target username
 
 	// WebRTC signaling
 	TypeSignalOffer  = "signal:offer"

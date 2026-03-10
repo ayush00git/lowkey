@@ -71,6 +71,9 @@ func (h *Hub) dispatch(ctx context.Context, username string, msg Message) {
 	case TypeSessionJoin:
 		h.handleSessionJoin(ctx, username, msg)
 
+	case TypeSessionConnect:
+		h.handleSessionConnect(ctx, username, msg)
+
 	case TypeSignalOffer, TypeSignalAnswer, TypeSignalICE:
 		h.handleSignalRelay(ctx, username, msg)
 
@@ -159,4 +162,66 @@ func (h *Hub) handleSignalRelay(ctx context.Context, sender string, msg Message)
 	if err := h.Send(ctx, msg.Target, msg); err != nil {
 		h.SendError(ctx, sender, "RELAY_FAILED", "could not reach target: "+msg.Target)
 	}
+}
+
+// handleSessionConnect creates a session and auto-joins the target user by username.
+// Flow: Phone A sends {type: "session:connect", target: "bob"}
+//   → Server creates session, adds both users
+//   → Both receive session:joined with peer info + encryption key
+func (h *Hub) handleSessionConnect(ctx context.Context, initiator string, msg Message) {
+	target := msg.Target
+	if target == "" {
+		h.SendError(ctx, initiator, "MISSING_TARGET", "target username is required")
+		return
+	}
+
+	if target == initiator {
+		h.SendError(ctx, initiator, "INVALID_TARGET", "cannot connect to yourself")
+		return
+	}
+
+	if !h.IsOnline(target) {
+		h.SendError(ctx, initiator, "USER_OFFLINE", target+" is not online")
+		return
+	}
+
+	// Create session with initiator
+	sess, err := h.store.Create(initiator)
+	if err != nil {
+		h.SendError(ctx, initiator, "SESSION_CREATE_FAILED", err.Error())
+		return
+	}
+
+	// Auto-join the target
+	sess, err = h.store.Join(sess.ID, target)
+	if err != nil {
+		h.SendError(ctx, initiator, "SESSION_JOIN_FAILED", err.Error())
+		return
+	}
+
+	encodedKey := base64.StdEncoding.EncodeToString(sess.SharedKey)
+
+	// Notify initiator
+	initiatorPayload, _ := json.Marshal(SessionJoinedPayload{
+		SessionID: sess.ID.String(),
+		Peer:      target,
+		Key:       encodedKey,
+	})
+	_ = h.Send(ctx, initiator, Message{
+		Type:    TypeSessionJoined,
+		Payload: initiatorPayload,
+	})
+
+	// Notify target
+	targetPayload, _ := json.Marshal(SessionJoinedPayload{
+		SessionID: sess.ID.String(),
+		Peer:      initiator,
+		Key:       encodedKey,
+	})
+	_ = h.Send(ctx, target, Message{
+		Type:    TypeSessionJoined,
+		Payload: targetPayload,
+	})
+
+	log.Printf("[handler] %s connected to %s (session: %s)", initiator, target, sess.ID)
 }
