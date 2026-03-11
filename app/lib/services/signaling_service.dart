@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:socks5_proxy/socks_client.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Handles WebSocket communication with the Go signaling server.
@@ -28,12 +31,24 @@ class SignalingService {
   String? get username => _username;
 
   /// Connect to the signaling server.
-  void connect(String serverUrl, String username) {
+  /// If [socksPort] is provided, traffic is routed through a local SOCKS5 proxy (Tor).
+  Future<void> connect(String serverUrl, String username, {int? socksPort}) async {
     _username = username;
     final uri = Uri.parse('$serverUrl/ws?username=$username');
 
     try {
-      _channel = WebSocketChannel.connect(uri);
+      if (socksPort != null) {
+        // Route WebSocket through Tor's SOCKS5 proxy
+        final client = HttpClient();
+        SocksTCPClient.assignToHttpClient(client, [
+          ProxySettings(InternetAddress.loopbackIPv4, socksPort),
+        ]);
+        final ws = await WebSocket.connect(uri.toString(), customClient: client);
+        _channel = IOWebSocketChannel(ws);
+      } else {
+        _channel = WebSocketChannel.connect(uri);
+      }
+
       _connected = true;
       _onConnectionChange.add(true);
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=Lowkey Tor Signaling Server
+After=network.target tor.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/lowkey-tor
+ExecStart=/opt/lowkey-tor/lowkey-server
+Restart=always
+RestartSec=5
+Environment=PORT=8081
+Environment=SESSION_TTL=10m
+Environment=CORS_ORIGINS=*
+
+[Install]
+WantedBy=multi-user.target

@@ -7,6 +7,7 @@ import '../models/message.dart';
 import '../services/signaling_service.dart';
 import '../services/webrtc_service.dart';
 import '../services/crypto_service.dart';
+import '../services/tor_service.dart';
 import '../widgets/message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -25,12 +26,15 @@ class _ChatScreenState extends State<ChatScreen> {
   late SignalingService _signaling;
   late WebRTCService _webrtc;
   final _crypto = CryptoService();
+  final _tor = TorService();
 
   String _username = '';
   String? _peer;
   bool _isInitiator = false;
   bool _wsConnected = false;
   bool _p2pConnected = false;
+  bool _torEnabled = false;
+  bool _torStarting = false;
   final List<ChatMessage> _messages = [];
   final List<StreamSubscription> _subs = [];
 
@@ -111,7 +115,26 @@ class _ChatScreenState extends State<ChatScreen> {
       _handleIncomingMessage(data);
     }));
 
-    _signaling.connect(_serverUrl, _username);
+    // Connect — through Tor if enabled
+    if (_torEnabled) {
+      setState(() => _torStarting = true);
+      try {
+        await _tor.start();
+        _showSnackbar('🧅 tor connected — routing through onion network');
+      } catch (e) {
+        _showSnackbar('tor failed to start: $e', isError: true);
+        setState(() {
+          _torStarting = false;
+          _torEnabled = false;
+        });
+        _signaling.connect(_serverUrl, _username);
+        return;
+      }
+      setState(() => _torStarting = false);
+      await _signaling.connect(_serverUrl, _username, socksPort: _tor.port);
+    } else {
+      await _signaling.connect(_serverUrl, _username);
+    }
   }
 
   void _handleIncomingMessage(String data) {
@@ -321,6 +344,25 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       actions: [
+        if (_torEnabled)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7B4F9D).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '🧅 tor',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF7B4F9D),
+                ),
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(right: 12),
           child: Container(
@@ -437,11 +479,52 @@ class _ChatScreenState extends State<ChatScreen> {
           if (!_wsConnected) ...[
             const SizedBox(height: 12),
             Text(
-              'Waiting for server connection...',
+              _torStarting
+                  ? 'Bootstrapping Tor circuit...'
+                  : 'Waiting for server connection...',
               style: GoogleFonts.inter(
                 fontSize: 12,
                 color: const Color(0xFFE57373),
               ),
+            ),
+          ],
+          if (!_p2pConnected) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.shield_rounded,
+                  size: 16,
+                  color: _torEnabled
+                      ? const Color(0xFF7B4F9D)
+                      : const Color(0xFFBDBDBD),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Route through Tor',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF616161),
+                  ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  height: 24,
+                  child: Switch(
+                    value: _torEnabled,
+                    onChanged: _wsConnected
+                        ? null // Can't toggle after connected
+                        : (val) {
+                            setState(() => _torEnabled = val);
+                            // Reconnect with new setting
+                            _signaling.disconnect();
+                            _initServices();
+                          },
+                    activeColor: const Color(0xFF7B4F9D),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
