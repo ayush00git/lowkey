@@ -89,9 +89,19 @@ class _ChatScreenState extends State<ChatScreen> {
     }));
 
     _subs.add(_webrtc.onDataChannelState.listen((connected) {
+      final wasPreviouslyConnected = _p2pConnected;
       setState(() => _p2pConnected = connected);
       if (connected) {
         _showSnackbar('e2e encryption active. zero trust.');
+      } else if (wasPreviouslyConnected) {
+        // Peer disconnected — reset everything back to blank state
+        _webrtc.close();
+        setState(() {
+          _messages.clear();
+          _peer = null;
+          _isInitiator = false;
+        });
+        _showSnackbar('peer disconnected');
       }
     }));
 
