@@ -38,10 +38,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<ChatMessage> _messages = [];
   final List<StreamSubscription> _subs = [];
 
-  // Server URL — IMPORTANT: 
-  // - Use 'wss://lowkey.ayushz.me' for Production
-  // - Use 'ws://10.189.40.195:8080' for Local Dev
+  // Server URLs
+  // - Clearnet: 'wss://lowkey.ayushz.me'
+  // - Tor:      'ws://<onion>' (no SSL needed — Tor encrypts the circuit)
   static const _serverUrl = 'wss://lowkey.ayushz.me'; 
+  static const _onionUrl = 'ws://aphyy4msuau6fle72grdyurn5c5tapqe3nlmwftp2wbetd5aqwajnmid.onion';
 
   @override
   void initState() {
@@ -127,11 +128,11 @@ class _ChatScreenState extends State<ChatScreen> {
           _torStarting = false;
           _torEnabled = false;
         });
-        _signaling.connect(_serverUrl, _username);
+        await _signaling.connect(_serverUrl, _username);
         return;
       }
       setState(() => _torStarting = false);
-      await _signaling.connect(_serverUrl, _username, socksPort: _tor.port);
+      await _signaling.connect(_onionUrl, _username, socksPort: _tor.port);
     } else {
       await _signaling.connect(_serverUrl, _username);
     }
