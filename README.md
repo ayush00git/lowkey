@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/assets/images/logo.webp" width="80" height="80" style="border-radius: 20px" />
+  <img src="app/assets/images/logo.webp" width="150" height="150" style="border-radius: 20px" />
 </p>
 
 <h1 align="center">lowkey</h1>
@@ -233,13 +233,41 @@ All signaling messages follow the same envelope:
 
 ## Cryptography
 
+Lowkey uses a **DH Ratchet** for forward secrecy — each turn in the conversation uses a fresh X25519 key pair:
+
+```mermaid
+sequenceDiagram
+    participant A as Alice
+    participant B as Bob
+
+    Note over A: Ratchet keys: (privA1, pubA1)
+    Note over B: Ratchet keys: (privB1, pubB1)
+
+    A->>B: msg 1 — encrypted with DH(privA1, pubB1) + pubA1
+    A->>B: msg 2 — same keys (no turn change)
+
+    B->>B: Sees pubA1, marks ratchet needed
+    B->>B: Generate fresh (privB2, pubB2)
+    B->>A: msg 3 — encrypted with DH(privB2, pubA1) + pubB2
+    Note over B: privB1 discarded ✓
+
+    A->>A: Sees pubB2, marks ratchet needed
+    A->>A: Generate fresh (privA2, pubA2)
+    A->>B: msg 4 — encrypted with DH(privA2, pubB2) + pubA2
+    Note over A: privA1 discarded ✓
+
+    Note over A,B: Each turn uses a unique shared secret
+```
+
 | Property | Value |
 |:---------|:------|
 | **Key Exchange** | X25519 Diffie-Hellman (client-side) |
+| **DH Ratchet** | Fresh X25519 key pair on each turn change |
 | **Symmetric Cipher** | XSalsa20-Poly1305 (NaCl Box) |
 | **Nonce** | 24 bytes, random per message |
-| **Key Generation** | Client-side — server never sees the shared secret |
-| **Message Format** | `base64(24-byte nonce + ciphertext + Poly1305 MAC)` |
+| **Forward Secrecy** | ✅ Old private keys are discarded after ratchet |
+| **Key Generation** | Client-side — server never sees any secrets |
+| **Message Format** | `{"rk": "<ratchet_pubkey>", "ct": "<nonce+ciphertext+MAC>"}` |
 
 ---
 
@@ -289,7 +317,3 @@ Production runs on a VPS with:
 4. **SSL** → Let's Encrypt via Certbot for `wss://` support
 
 ---
-
-## License
-
-MIT
